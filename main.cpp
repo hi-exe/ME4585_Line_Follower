@@ -12,6 +12,9 @@
 // DC motor lib
 #include "pm2_drivers/DCMotor.h"
 
+// Line Sensor lib
+#include "pm2_drivers/SensorBar.h"
+
 bool do_execute_main_task = false; // this variable will be toggled via the user button (blue button) and
                                    // decides whether to execute the main task or not
 bool do_reset_all_once = false;    // this variable is used to reset certain variables and objects and
@@ -51,28 +54,26 @@ int main()
     DCMotor motor_M1(PB_PWM_M1, PB_ENC_A_M1, PB_ENC_B_M1, gear_ratio, kn, voltage_max);
     DCMotor motor_M2(PB_PWM_M2, PB_ENC_A_M2, PB_ENC_B_M2, gear_ratio, kn, voltage_max);
 
-    // additional dc motor settings (don't use them for the line follower)
-    motor_M1.enableMotionPlanner();
-    motor_M1.setMaxVelocity(motor_M1.getMaxVelocity() * 1.0f);
-    motor_M1.setMaxAcceleration(motor_M1.getMaxAcceleration() * 1.0f);
-    motor_M1.setVelocityCntrlIntegratorLimitsPercent(100.0f);
-    motor_M2.enableMotionPlanner();
-    motor_M2.setMaxVelocity(motor_M2.getMaxVelocity() * 1.0f);
-    motor_M2.setMaxAcceleration(motor_M2.getMaxAcceleration() * 1.0f);
-    motor_M2.setVelocityCntrlIntegratorLimitsPercent(100.0f);
+    // robot kinematics
+    const float r1_wheel = 0.0175f; // right wheel radius in meters
+    const float r2_wheel = 0.0175f; // left  wheel radius in meters
+    const float b_wheel = 0.13f;          // wheelbase, distance from wheel to wheel in meters
+    Eigen::Matrix2f Cwheel2robot; // transform wheel to robot
+    Cwheel2robot <<  r_wheel / 2.0f   ,  r_wheel / 2.0f   ,
+                    r_wheel / b_wheel, -r_wheel / b_wheel;
 
-    // // robot kinematics
-    // const float r_wheel = 0.034f / 2.0f; // wheel radius in meters
-    // const float b_wheel = 0.13f;          // wheelbase, distance from wheel to wheel in meters
-    // Eigen::Matrix2f Cwheel2robot; // transform wheel to robot
-    // Cwheel2robot <<  r_wheel / 2.0f   ,  r_wheel / 2.0f   ,
-    //                 r_wheel / b_wheel, -r_wheel / b_wheel;
-    // Eigen::Vector2f robot_coord = {0.0f, 0.0f};  // contains v and w (robot translational and rotational velocity)
-    // Eigen::Vector2f wheel_speed = {0.0f, 0.0f};  // w1 w2 (wheel speed)
+    // Line Sensor Constants
+    const float bar_dist = 0.083f; // distance from wheel axis to leds on sensor bar / array in meters
+    SensorBar sensorBar(PB_9, PB_8, bar_dist);
 
-    // const float L_square = 1.4f;     // forward distance in meters
-    // const float turn = M_PI / 2.0f; // rotation angle in radians
-    //                                  // -90 deg for right turn (CW), +90 deg for left turn (CCW)
+    // angle measured from sensor bar (black line) relative to robot
+    float angle{0.0f};
+
+    // rotational velocity controller
+    const float Kp{5.0f};
+
+    // velocity controller data
+    const float wheel_vel_max = 2.0f * M_PI * motor_M2.getMaxPhysicalVelocity();
 
     // // calculate pure forward and pure turn movement as wheel angles
     // Eigen::Vector2f robot_coord_forward = {L_square, 0.0f};
@@ -81,15 +82,12 @@ int main()
     // Eigen::Vector2f wheel_angle_turn = Cwheel2robot.inverse() * robot_coord_turn;
 
     // set up states for state machine
-    enum RobotState {
-        FORWARD,
-        TURN,
-        RESET
-    } robot_state = RobotState::FORWARD;
+    // enum RobotState {
+    //     FORWARD,
+    //     TURN,
+    //     RESET
+    // } robot_state = RobotState::FORWARD;
 
-    const float angle_threshold = 0.005f;
-    int turn_cntr = 0;
- 
     // start timer
     main_task_timer.start();
 
@@ -98,41 +96,26 @@ int main()
         main_task_timer.reset();
 
         if (do_execute_main_task) {
+           
+            // visual feedback that the main task is executed, setting this once would actually be enough
+            led1 = 1;
             enable_motors = 1;
-            // state machine
-            switch (robot_state) {
-                case RobotState::FORWARD:
-                    motor_M1.setRotationRelative(wheel_angle_forward(0) / (2.0f * M_PI));
-                    motor_M2.setRotationRelative(wheel_angle_forward(1) / (2.0f * M_PI));
-                    robot_state = RobotState::TURN;
-                    break;
-                case RobotState::TURN:
-                    if ((fabs(motor_M1.getRotationTarget() - motor_M1.getRotation()) < angle_threshold) &&
-                        (fabs(motor_M2.getRotationTarget() - motor_M2.getRotation()) < angle_threshold)) {
-                        motor_M1.setRotationRelative(wheel_angle_turn(0) / (2.0f * M_PI));
-                        motor_M2.setRotationRelative(wheel_angle_turn(1) / (2.0f * M_PI));
-                        robot_state = RobotState::FORWARD_OR_RESET;
-                    }
-                    break;
-                case RobotState::FORWARD_OR_RESET:
-                    if ((fabs(motor_M1.getRotationTarget() - motor_M1.getRotation()) < angle_threshold) &&
-                        (fabs(motor_M2.getRotationTarget() - motor_M2.getRotation()) < angle_threshold)) {
-                        turn_cntr++;
-                        if (turn_cntr == 4) {
-                            robot_state = RobotState::RESET;
-                        } else {
-                            robot_state = RobotState::FORWARD;
-                        }
-                    }
-                    break;
-                case RobotState::RESET:
-                    toggle_do_execute_main_fcn();
-                    turn_cntr = 0;
-                    robot_state = RobotState::FORWARD;
-                    break;
-                default:
-                    break;
+
+            // only update sensor bar angle if a led is triggered
+            if (sensorBar.isAnyLedActive()) {
+                angle = sensorBar.getAvgAngleRad();
             } 
+            // control algorithm in robot velocities
+            Eigen::Vector2f robot_coord = {0.5f * wheel_vel_max * r1_wheel, // half of the max. forward velocity
+                                           Kp * angle};                     // proportional angle controller
+
+            // map robot velocities to wheel velocities in rad/sec
+            Eigen::Vector2f wheel_speed = Cwheel2robot.inverse() * robot_coord;
+
+            // setpoints for the dc-motors in rps
+            motor_M1.setVelocity(wheel_speed(0) / (2.0f * M_PI)); // set a desired speed for speed controlled dc motors M1
+            motor_M2.setVelocity(wheel_speed(1) / (2.0f * M_PI)); // set a desired speed for speed controlled dc motors M2
+
             // debugging
             printf("RS: %d, M1 SP: %.3f, M2 SP: %.3f, M1: %.3f, M2: %.3f, TC: %d\n", robot_state
                                                                                    , motor_M1.getRotationTarget()
@@ -144,6 +127,10 @@ int main()
             // the following code block gets executed only once
             if (do_reset_all_once) {
                 do_reset_all_once = false;
+
+                // reset variables and objects
+                led1 = 0;
+                enable_motors = 0;
             }
         }
         
