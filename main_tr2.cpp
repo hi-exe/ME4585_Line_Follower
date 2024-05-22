@@ -15,9 +15,6 @@
 // Line Sensor lib
 #include "pm2_drivers/SensorBar.h"
 
-// Line Follower lib
-#include "pm2_drivers/LineFollower.h"
-
 bool do_execute_main_task = false; // this variable will be toggled via the user button (blue button) and
                                    // decides whether to execute the main task or not
 bool do_reset_all_once = false;    // this variable is used to reset certain variables and objects and
@@ -45,6 +42,8 @@ int main()
     // led on nucleo board
     DigitalOut user_led(USER_LED);
 
+
+
     // DC Motot Intit
     // create object to enable power electronics for the dc motors
     DigitalOut enable_motors(PB_ENABLE_DCMOTORS);
@@ -57,37 +56,33 @@ int main()
     DCMotor motor_M1(PB_PWM_M1, PB_ENC_A_M1, PB_ENC_B_M1, gear_ratio, kn, voltage_max); //Right Motor
     DCMotor motor_M2(PB_PWM_M2, PB_ENC_A_M2, PB_ENC_B_M2, gear_ratio, kn, voltage_max); //Left Motor
 
+
+
+    // Sensor Bar Init
     // robot kinematics
     const float r1_wheel = 0.0175f; // right wheel radius in meters
     const float r2_wheel = 0.0175f; // left  wheel radius in meters
-    const float b_wheel = 0.13f;          // wheelbase, distance from wheel to wheel in meters
-    Eigen::Matrix2f Cwheel2robot; // transform wheel to robot
-    Cwheel2robot <<  r_wheel / 2.0f   ,  r_wheel / 2.0f   ,
-                    r_wheel / b_wheel, -r_wheel / b_wheel;
-
-    // Line Follower Init
-    const float d_wheel = 0.035f;  // wheel diameter in meters
     const float b_wheel = 0.1518f; // wheelbase, distance from wheel to wheel in meters
+    Eigen::Matrix2f Cwheel2robot; // transform wheel to robot
+    Cwheel2robot <<  r1_wheel / 2.0f   ,  r2_wheel / 2.0f   ,
+                    r1_wheel / b_wheel, -r2_wheel / b_wheel;
+
     const float bar_dist = 0.118f; // distance from wheel axis to leds on sensor bar / array in meters
-    // line follower
-    LineFollower lineFollower(PB_9, PB_8, bar_dist, d_wheel, b_wheel, motor_M2.getMaxPhysicalVelocity());
+    SensorBar sensorBar(PB_9, PB_8, bar_dist);
 
-    // Parametres Adjustment
-    const float Kp{5.0f}; //Proportional Gain
-    const float Kp_nl{5.0f}; //Non-linear Gain
-    void setRotationalVelocityGain(float Kp, float Kp_nl)
-
-    // velocity controller data
+    // angle measured from sensor bar (black line) relative to robot
+    float angle{0.0f};
+    const float Kp{5.0f};
     const float wheel_vel_max = 2.0f * M_PI * motor_M2.getMaxPhysicalVelocity();
-    void setMaxWheelVelocityRPS(float wheel_vel_max) 
-    //This parameter limits the maximum wheel velocity (argument in rotations per second), indirectly affecting the robot's linear and angular velocities.
-    //The user can adjust this limit to tune the performance of their system.
+
+
 
     // set up states for state machine
     enum RobotState {
         INITIAL,
         LINE_FOLLOW,
-        RIGHT_ANGLE,
+        RIGHT_ANGLE_L,
+        RIGHT_ANGLE_R,
         GAP,
         FOUR_WAY,
         T_WAY,
@@ -95,18 +90,29 @@ int main()
         PANIC
     } robot_state = RobotState::INITIAL;
 
+    // control algorithm in robot velocities
+    Eigen::Vector2f robot_coord;
+                    // proportional angle controller
+
+    // map robot velocities to wheel velocities in rad/sec
+    Eigen::Vector2f wheel_speed;
+   
+    int lval;
 
     // start timer
     main_task_timer.start();
+
 
     // this loop will run forever
     while (true) {
         main_task_timer.reset();
 
+        lval = sensorBar.getRaw();
+        printf("lval: %d \n", lval);
+
         if (do_execute_main_task) {
            
-            // visual feedback that the main task is executed, setting this once would actually be enough
-            led1 = 1;
+            enable_motors = 1; //Enable Motor
 
             // state machine
                 switch (robot_state) {
@@ -114,52 +120,112 @@ int main()
                         //Intial starting state
                         printf("INITIAL\n");
 
-                        enable_motors = 1; //Enable Motor
                         robot_state = RobotState::LINE_FOLLOW;
 
                         break;
 
                     case RobotState::LINE_FOLLOW:
                         //Main line following state, enter all other states from here
+                        printf("lval: %d \n", lval);
                         printf("LINE_FOLLOW\n");
                         
+                        // only update sensor bar angle if a led is triggered
+                        if (sensorBar.isAnyLedActive()) {
+                            angle = sensorBar.getAvgAngleRad();
+                        }
 
+                        
+                        // control algorithm in robot velocities
+                        robot_coord = {0.5f * wheel_vel_max * r1_wheel, // half of the max. forward velocity
+                                                    Kp * angle};                     // proportional angle controller
 
+                        // map robot velocities to wheel velocities in rad/sec
+                        wheel_speed = Cwheel2robot.inverse() * robot_coord;
 
+                        // setpoints for the dc-motors in rps
+                        motor_M1.setVelocity(wheel_speed(0) / (2.0f * M_PI)); // set a desired speed for speed controlled dc motors M1
+                        motor_M2.setVelocity(wheel_speed(1) / (2.0f * M_PI)); // set a desired speed for speed controlled dc motors M2
+                    
 
+                        if (!sensorBar.isAnyLedActive()) {
+                            robot_state = RobotState::GAP;
 
+                        } 
+                        // else if () {
+                        //     robot_state = RobotState::FOUR_WAY;
+
+                        // } 
+                        // else if () {
+                        //     robot_state = RobotState::T_WAY;
+
+                        // } 
+                        // else if () {
+                        //     robot_state = RobotState::DEAD_END;
+
+                        // } 
+                        else if (lval == 0b00001111) {
+                            robot_state = RobotState::RIGHT_ANGLE_L;
+
+                        } 
+                        else if (lval == 0b11110000) {
+                            robot_state = RobotState::RIGHT_ANGLE_R;
+
+                        }
 
                         break;
 
-                    case RobotState::RIGHT_ANGLE:
-                        printf("RIGHT_ANGLE\n");
-                       
+                    case RobotState::RIGHT_ANGLE_L:
+                        printf("RIGHT_ANGLE_L\n");
+                        
+
+                        robot_state = RobotState::LINE_FOLLOW;
+                        
+                        break;
+                        
+                    case RobotState::RIGHT_ANGLE_R:
+                        printf("RIGHT_ANGLE_R\n");
+                        
+
+                        robot_state = RobotState::LINE_FOLLOW;
+                        
                         break;
 
                     case RobotState::GAP:
                         printf("GAP\n");
+                        // enable the motion planner for smooth movement
+                        motor_M1.enableMotionPlanner(true);
+                        motor_M2.enableMotionPlanner(true);
+                        
+                        //0.181891 rot
+                        motor_M1.setRotation(5.0f);
+                        motor_M2.setRotation(5.0f);
 
+                        // disable the motion planner
+                        motor_M1.enableMotionPlanner(false);
+                        motor_M2.enableMotionPlanner(false);
+
+                        robot_state = RobotState::LINE_FOLLOW;
                         break;
 
-                    case RobotState::FOUR_WAY:
-                        printf("FOUR_WAY\n");
+                    // case RobotState::FOUR_WAY:
+                    //     printf("FOUR_WAY\n");
 
-                        break;
+                    //     break;
     
-                    case RobotState::T_WAY:
-                        printf("T_WAY\n");
+                    // case RobotState::T_WAY:
+                    //     printf("T_WAY\n");
 
-                        break;
+                    //     break;
     
-                    case RobotState::DEAD_END:
-                        printf("DEAD_END\n");
+                    // case RobotState::DEAD_END:
+                    //     printf("DEAD_END\n");
 
-                        break;
+                    //     break;
     
-                    case RobotState::PANIC:
-                        printf("PANIC\n");
+                    // case RobotState::PANIC:
+                    //     printf("PANIC\n");
 
-                        break;
+                    //     break;
 
                     default:
 
@@ -178,7 +244,6 @@ int main()
                 do_reset_all_once = false;
 
                 // reset variables and objects
-                led1 = 0;
                 enable_motors = 0;
             }
         }
