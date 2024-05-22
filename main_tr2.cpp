@@ -96,12 +96,22 @@ int main()
 
     // map robot velocities to wheel velocities in rad/sec
     Eigen::Vector2f wheel_speed;
-   
+
+    // Turning Vector Stuff
+    const float turn = -M_PI / 2.0f; // -90 deg for right turn (CW), +90 deg for left turn (CCW)
+    Eigen::Vector2f robot_coord_turn;
+    Eigen::Vector2f wheel_angle_turn;
+
+    // Forward Vector Stuff
+    float L_square;     // forward distance in meters
+    Eigen::Vector2f robot_coord_forward;
+    Eigen::Vector2f wheel_angle_forward;
+
+    //raw data tracker
     int lval;
 
     // start timer
     main_task_timer.start();
-
 
     // this loop will run forever
     while (true) {
@@ -146,10 +156,8 @@ int main()
                         motor_M1.setVelocity(wheel_speed(0) / (2.0f * M_PI)); // set a desired speed for speed controlled dc motors M1
                         motor_M2.setVelocity(wheel_speed(1) / (2.0f * M_PI)); // set a desired speed for speed controlled dc motors M2
                     
-
                         if (!sensorBar.isAnyLedActive()) {
                             robot_state = RobotState::GAP;
-
                         } 
                         // else if () {
                         //     robot_state = RobotState::FOUR_WAY;
@@ -159,17 +167,11 @@ int main()
                         //     robot_state = RobotState::T_WAY;
 
                         // } 
-                        // else if () {
-                        //     robot_state = RobotState::DEAD_END;
-
-                        // } 
                         else if (lval == 0b00001111) {
-                            robot_state = RobotState::RIGHT_ANGLE_L;
-
+                            robot_state = RobotState::RIGHT_ANGLE_R;
                         } 
                         else if (lval == 0b11110000) {
-                            robot_state = RobotState::RIGHT_ANGLE_R;
-
+                            robot_state = RobotState::RIGHT_ANGLE_L;
                         }
 
                         break;
@@ -177,6 +179,12 @@ int main()
                     case RobotState::RIGHT_ANGLE_L:
                         printf("RIGHT_ANGLE_L\n");
                         
+                        robot_coord_turn = {0.0, (-1.0f * turn)}; //times -1 for left turn
+
+                        wheel_angle_turn = Cwheel2robot.inverse() * robot_coord_turn;
+
+                        motor_M1.setRotationRelative(wheel_angle_turn(0) / (2.0f * M_PI));
+                        motor_M2.setRotationRelative(wheel_angle_turn(1) / (2.0f * M_PI));
 
                         robot_state = RobotState::LINE_FOLLOW;
                         
@@ -185,6 +193,12 @@ int main()
                     case RobotState::RIGHT_ANGLE_R:
                         printf("RIGHT_ANGLE_R\n");
                         
+                        robot_coord_turn = {0.0, (turn)}; //right turn
+
+                        wheel_angle_turn = Cwheel2robot.inverse() * robot_coord_turn;
+
+                        motor_M1.setRotationRelative(wheel_angle_turn(0) / (2.0f * M_PI));
+                        motor_M2.setRotationRelative(wheel_angle_turn(1) / (2.0f * M_PI));
 
                         robot_state = RobotState::LINE_FOLLOW;
                         
@@ -192,17 +206,14 @@ int main()
 
                     case RobotState::GAP:
                         printf("GAP\n");
-                        // enable the motion planner for smooth movement
-                        motor_M1.enableMotionPlanner(true);
-                        motor_M2.enableMotionPlanner(true);
-                        
-                        //0.181891 rot
-                        motor_M1.setRotation(5.0f);
-                        motor_M2.setRotation(5.0f);
 
-                        // disable the motion planner
-                        motor_M1.enableMotionPlanner(false);
-                        motor_M2.enableMotionPlanner(false);
+                        //0.181891 rot
+                        L_square = 0.181891;
+                        robot_coord_forward = {L_square, 0.0f};
+                        wheel_angle_forward = Cwheel2robot.inverse() * robot_coord_forward;
+
+                        motor_M1.setRotationRelative(wheel_angle_forward(0) / (2.0f * M_PI));
+                        motor_M2.setRotationRelative(wheel_angle_forward(1) / (2.0f * M_PI));
 
                         robot_state = RobotState::LINE_FOLLOW;
                         break;
