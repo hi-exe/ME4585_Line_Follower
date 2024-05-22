@@ -208,7 +208,7 @@ int main()
                         printf("GAP\n");
 
                         //0.181891 rot
-                        L_square = 0.181891;
+                        L_square = 0.03;
                         robot_coord_forward = {L_square, 0.0f};
                         wheel_angle_forward = Cwheel2robot.inverse() * robot_coord_forward;
 
