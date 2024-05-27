@@ -81,21 +81,10 @@ int main()
     enum RobotState {
         INITIAL,
         LINE_FOLLOW,
-        RIGHT_ANGLE_L,
-        RIGHT_ANGLE_R,
-        GAP,
-        BLACK_OUT,
-        PANIC
+        SEESAW,
+        STEP,
+        BRICK
     } robot_state = RobotState::INITIAL;
-
-    // set up states for NESTED state machine
-    enum BOState {
-        BO_INITIAL,
-        FOUR_WAY,
-        DEAD_END,
-        T_WAY,
-        DONE
-    } bo_state = BOState::BO_INITIAL;
 
     int counter = 0; //counter for delay thingy
 
@@ -152,7 +141,6 @@ int main()
                         if (sensorBar.isAnyLedActive()) {
                             angle = sensorBar.getAvgAngleRad();
                         }
-
                         
                         // control algorithm in robot velocities
                         robot_coord = {0.5f * wheel_vel_max * r1_wheel, // half of the max. forward velocity
@@ -165,180 +153,43 @@ int main()
                         motor_M1.setVelocity(wheel_speed(0) / (2.0f * M_PI)); // set a desired speed for speed controlled dc motors M1
                         motor_M2.setVelocity(wheel_speed(1) / (2.0f * M_PI)); // set a desired speed for speed controlled dc motors M2
                     
-                        if (!sensorBar.isAnyLedActive()) {
-                            robot_state = RobotState::GAP;
-                        } 
-                        else if (lval == 0b11111111) {
-                            robot_state = RobotState::BLACK_OUT;
-                        } 
-                        else if (lval == 0b00001111) {
-                            robot_state = RobotState::RIGHT_ANGLE_R;
-                        } 
-                        else if (lval == 0b11110000) {
-                            robot_state = RobotState::RIGHT_ANGLE_L;
-                        }
+                        // if () {
+                        //     robot_state = RobotState::SEESAW;
+                        // } 
+                        // else if () {
+                        //     robot_state = RobotState::STEP;
+                        // } 
+                        // else if () {
+                        //     robot_state = RobotState::BRICK;
+                        // } 
 
                         break;
 
-                    case RobotState::RIGHT_ANGLE_L:
-                        printf("RIGHT_ANGLE_L\n");
+                    case RobotState::SEESAW:
+                        printf("SEESAW\n");
                         
-                        //Move foward to center axel
-                        L_square = 0.105f;
-                        robot_coord_forward = {L_square, 0.0f};
-                        wheel_angle_forward = Cwheel2robot.inverse() * robot_coord_forward;
 
-                        motor_M1.setRotationRelative(wheel_angle_forward(0) / (2.0f * M_PI));
-                        motor_M2.setRotationRelative(wheel_angle_forward(1) / (2.0f * M_PI));
-                        
-                        counter++;
+                       
+                        robot_state = RobotState::LINE_FOLLOW;
 
-                        if (counter == 1) {
-                        //Turn to the left
-                        robot_coord_turn = {0.0, (-1.0f * turn)}; //times -1 for left turn
-
-                        wheel_angle_turn = Cwheel2robot.inverse() * robot_coord_turn;
-
-                        motor_M1.setRotationRelative(wheel_angle_turn(0) / (2.0f * M_PI));
-                        motor_M2.setRotationRelative(wheel_angle_turn(1) / (2.0f * M_PI));
-                        }
-
-                        else if (counter > 60) {
-                            counter =0;
-                            robot_state = RobotState::LINE_FOLLOW;
-                        }
-                        
                         break;
                         
-                    case RobotState::RIGHT_ANGLE_R:
-                        printf("RIGHT_ANGLE_R\n");
+                    case RobotState::STEP:
+                        printf("STEP\n");
                         
-                        //Move foward to center axel
-                        L_square = 0.105f;
-                        robot_coord_forward = {L_square, 0.0f};
-                        wheel_angle_forward = Cwheel2robot.inverse() * robot_coord_forward;
-
-                        motor_M1.setRotationRelative(wheel_angle_forward(0) / (2.0f * M_PI));
-                        motor_M2.setRotationRelative(wheel_angle_forward(1) / (2.0f * M_PI));
-
-                        //Turn to the Right
-                        robot_coord_turn = {0.0f, (turn)}; //right turn
-
-                        wheel_angle_turn = Cwheel2robot.inverse() * robot_coord_turn;
-
-                        motor_M1.setRotationRelative(wheel_angle_turn(0) / (2.0f * M_PI));
-                        motor_M2.setRotationRelative(wheel_angle_turn(1) / (2.0f * M_PI));
+                      
 
                         robot_state = RobotState::LINE_FOLLOW;
                         
                         break;
 
-                    case RobotState::GAP:
-                        printf("GAP\n");
+                    case RobotState::BRICK:
+                        printf("BRICK\n");
 
-                        L_square = 0.03f;
-                        robot_coord_forward = {L_square, 0.0f};
-                        wheel_angle_forward = Cwheel2robot.inverse() * robot_coord_forward;
-
-                        motor_M1.setRotationRelative(wheel_angle_forward(0) / (2.0f * M_PI));
-                        motor_M2.setRotationRelative(wheel_angle_forward(1) / (2.0f * M_PI));
+                       
 
                         robot_state = RobotState::LINE_FOLLOW;
-                        break;
 
-                    case RobotState::BLACK_OUT:
-                        printf("BLACK_OUT\n");
-
-                        L_square = 0.021f; //Move forward the width of the line
-                        robot_coord_forward = {L_square, 0.0f};
-                        wheel_angle_forward = Cwheel2robot.inverse() * robot_coord_forward;
-
-                        motor_M1.setRotationRelative(wheel_angle_forward(0) / (2.0f * M_PI));
-                        motor_M2.setRotationRelative(wheel_angle_forward(1) / (2.0f * M_PI));
-                        
-                        lval = sensorBar.getRaw();
-
-                        //Nested State Machine
-                        switch (bo_state) {
-                            case BOState::BO_INITIAL:
-                                //Intial BO starting state
-                                printf("BO INITIAL\n");
-
-                                lval = sensorBar.getRaw();
-
-                                if (lval == 0b00000000) {
-                                    bo_state = BOState::T_WAY;
-                                } else if (lval == 0b11111111) {
-                                    bo_state = BOState::DEAD_END;
-                                } else if (sensorBar.isAnyLedActive()) {
-                                    bo_state = BOState::FOUR_WAY;
-                                }
-                                break;
-
-                            case BOState::T_WAY:
-                                //Intial starting state
-                                printf("T_WAY\n");
-
-                                //Imma be honest this is just a left turn function
-                                //Move foward to center axel
-                                L_square = (0.105f - 0.021f);
-                                robot_coord_forward = {L_square, 0.0f};
-                                wheel_angle_forward = Cwheel2robot.inverse() * robot_coord_forward;
-
-                                motor_M1.setRotationRelative(wheel_angle_forward(0) / (2.0f * M_PI));
-                                motor_M2.setRotationRelative(wheel_angle_forward(1) / (2.0f * M_PI));
-
-                                //Turn to the left
-                                robot_coord_turn = {0.0, (-1.0f * turn)}; //times -1 for left turn
-
-                                wheel_angle_turn = Cwheel2robot.inverse() * robot_coord_turn;
-
-                                motor_M1.setRotationRelative(wheel_angle_turn(0) / (2.0f * M_PI));
-                                motor_M2.setRotationRelative(wheel_angle_turn(1) / (2.0f * M_PI));
-
-                                robot_state = RobotState::LINE_FOLLOW;
-                                break;
-
-                            case BOState::DEAD_END:
-                                //Intial starting state
-                                printf("DEAD_END\n");
-                                
-                                counter++;
-
-                                if (counter == 1) {
-                                //Turn 180 degrees
-                                robot_coord_turn = {0.0, (2.0f * turn)}; //times 2 for 180 turn
-
-                                wheel_angle_turn = Cwheel2robot.inverse() * robot_coord_turn;
-
-                                motor_M1.setRotationRelative(wheel_angle_turn(0) / (2.0f * M_PI));
-                                motor_M2.setRotationRelative(wheel_angle_turn(1) / (2.0f * M_PI));
-                                }
-
-                                else if (counter > 60) {
-                                    counter =0;
-                                    robot_state = RobotState::LINE_FOLLOW;
-                                }
-                                break;
-
-                            case BOState::FOUR_WAY:
-                                //Intial starting state
-                                printf("FOUR_WAY\n");
-                                robot_state = RobotState::LINE_FOLLOW;
-                                break;
-
-                            // case BOState::DONE:
-                            //     //Intial starting state
-                            //     printf("DONE\n");
-
-                            //     break;
-
-                            default:
-
-                                break; // do nothing
-                        }
-
-                        // printf("Failed to determine case\n");
                         break;
 
                     default:
