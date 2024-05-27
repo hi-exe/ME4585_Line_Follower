@@ -58,9 +58,9 @@ int main()
     DCMotor motor_M2(PB_PWM_M2, PB_ENC_A_M2, PB_ENC_B_M2, gear_ratio, kn, voltage_max); //Left Motor
 
     // Line Follower Init
-    const float d_wheel = 0.035f;  // wheel diameter in meters
-    const float b_wheel = 0.1518f; // wheelbase, distance from wheel to wheel in meters
-    const float bar_dist = 0.118f; // distance from wheel axis to leds on sensor bar / array in meters
+    const float d_wheel = 0.053f;  // wheel diameter in meters
+    const float b_wheel = 0.156f; // wheelbase, distance from wheel to wheel in meters
+    const float bar_dist = 0.132f; // distance from wheel axis to leds on sensor bar / array in meters
     // line follower
     LineFollower lineFollower(PB_9, PB_8, bar_dist, d_wheel, b_wheel, motor_M2.getMaxPhysicalVelocity());
 
@@ -102,6 +102,7 @@ int main()
                 do_reset_all_once = false;
 
                 // reset variables and objects
+
                 enable_motors = 0;
             }
         }
