@@ -56,18 +56,16 @@ int main()
     DCMotor motor_M1(PB_PWM_M1, PB_ENC_A_M1, PB_ENC_B_M1, gear_ratio, kn, voltage_max); //Right Motor
     DCMotor motor_M2(PB_PWM_M2, PB_ENC_A_M2, PB_ENC_B_M2, gear_ratio, kn, voltage_max); //Left Motor
 
-
-
     // Sensor Bar Init
     // robot kinematics
-    const float r1_wheel = 0.035f/2.0f; // right wheel radius in meters
-    const float r2_wheel = 0.035f/2.0f; // left  wheel radius in meters
-    const float b_wheel = 0.1518f; // wheelbase, distance from wheel to wheel in meters
+    const float r1_wheel = 0.0265f; // right wheel radius in meters
+    const float r2_wheel = 0.0265f; // left  wheel radius in meters
+    const float b_wheel = 0.156f; // wheelbase, distance from wheel to wheel in meters
     Eigen::Matrix2f Cwheel2robot; // transform wheel to robot
     Cwheel2robot <<  r1_wheel / 2.0f   ,  r2_wheel / 2.0f   ,
                     r1_wheel / b_wheel, -r2_wheel / b_wheel;
 
-    const float bar_dist = 0.118f; // distance from wheel axis to leds on sensor bar / array in meters
+    const float bar_dist = 0.132f; // distance from wheel axis to leds on sensor bar / array in meters 
     SensorBar sensorBar(PB_9, PB_8, bar_dist);
 
     // angle measured from sensor bar (black line) relative to robot
@@ -75,49 +73,31 @@ int main()
     const float Kp{15.0f};
     const float wheel_vel_max = 2.0f * M_PI * motor_M2.getMaxPhysicalVelocity();
 
-
-
     // set up states for state machine
     enum RobotState {
         INITIAL,
         LINE_FOLLOW,
-        RIGHT_ANGLE_L,
-        RIGHT_ANGLE_R,
-        GAP,
         BLACK_OUT,
-        PANIC
-    } robot_state = RobotState::INITIAL;
-
-    // set up states for NESTED state machine
-    enum BOState {
-        BO_INITIAL,
         FOUR_WAY,
         DEAD_END,
-        T_WAY,
-        DONE
-    } bo_state = BOState::BO_INITIAL;
+        BO_DEC,
+        BU,
+        BT_FOLLOW,
+        T_WAY
+    } robot_state = RobotState::INITIAL;
 
     int counter = 0; //counter for delay thingy
 
-    // control algorithm in robot velocities
-    Eigen::Vector2f robot_coord;
-                    // proportional angle controller
-
-    // map robot velocities to wheel velocities in rad/sec
-    Eigen::Vector2f wheel_speed;
-
-    // Turning Vector Stuff
-    const float turn = -M_PI / 2.0f; // -90 deg for right turn (CW), +90 deg for left turn (CCW)
-    Eigen::Vector2f robot_coord_turn;
-    Eigen::Vector2f wheel_angle_turn;
-
-    // Forward Vector Stuff
-    float L_square;     // forward distance in meters
-    Eigen::Vector2f robot_coord_forward;
-    Eigen::Vector2f wheel_angle_forward;
+    //Forward movers
+    float forw_1;
+    float forw_2;
 
     //raw data tracker
     int lval;
+
+    //Rotation Stuff
+    const float angle_threshold = 0.01f;
+    int turn_center = 0;
 
     // start timer
     main_task_timer.start();
@@ -126,6 +106,11 @@ int main()
     while (true) {
         main_task_timer.reset();
 
+        // only update sensor bar angle if a led is triggered
+        if (sensorBar.isAnyLedActive()) {
+            angle = sensorBar.getAvgAngleRad();
+        }
+
         lval = sensorBar.getRaw();
         printf("lval: %d \n", lval);
 
@@ -133,225 +118,146 @@ int main()
            
             enable_motors = 1; //Enable Motor
 
+            // control algorithm in robot velocities
+            Eigen::Vector2f robot_coord;
+                            // proportional angle controller
+
+            // map robot velocities to wheel velocities in rad/sec
+            Eigen::Vector2f wheel_speed;
+
             // state machine
-                switch (robot_state) {
-                    case RobotState::INITIAL:
-                        //Intial starting state
-                        printf("INITIAL\n");
+            switch (robot_state) {
+                case RobotState::INITIAL:
+                    //Intial starting state
+                    printf("INITIAL\n");
 
-                        robot_state = RobotState::LINE_FOLLOW;
+                    robot_state = RobotState::LINE_FOLLOW;
 
-                        break;
+                    break;
 
-                    case RobotState::LINE_FOLLOW:
-                        //Main line following state, enter all other states from here
-                        printf("lval: %d \n", lval);
-                        printf("LINE_FOLLOW\n");
-                        
-                        // only update sensor bar angle if a led is triggered
-                        if (sensorBar.isAnyLedActive()) {
-                            angle = sensorBar.getAvgAngleRad();
+                case RobotState::LINE_FOLLOW:
+                    //Main line following state, enter all other states from here
+                    printf("lval: %d \n", lval);
+                    printf("LINE_FOLLOW\n");
+
+                    // control algorithm in robot velocities
+                    robot_coord = {0.5f * wheel_vel_max * r1_wheel, // half of the max. forward velocity
+                                                Kp * angle};                     // proportional angle controller
+
+                    // map robot velocities to wheel velocities in rad/sec
+                    wheel_speed = Cwheel2robot.inverse() * robot_coord;
+
+                    // setpoints for the dc-motors in rps
+                    motor_M1.setVelocity(wheel_speed(0) / (2.0f * M_PI)); // set a desired speed for speed controlled dc motors M1
+                    motor_M2.setVelocity(wheel_speed(1) / (2.0f * M_PI)); // set a desired speed for speed controlled dc motors M2
+
+                    if (lval == 255) {
+                        robot_state = RobotState::BLACK_OUT;
+                    } 
+
+                    break;
+
+                case RobotState::BLACK_OUT:
+                    printf("BLACK_OUT\n");
+
+                    //Move Forward
+                    forw_1 = motor_M1.getRotation() + 0.2f;
+                    forw_2 = motor_M2.getRotation() + 0.2f;
+
+                    motor_M1.setRotation(forw_1);
+                    motor_M2.setRotation(forw_2);
+
+                    robot_state = RobotState::BO_DEC;
+
+                    break;
+
+                case RobotState::BO_DEC:
+                    //Intial starting state
+                    printf("BO_DEC\n");
+
+                    if ((fabs(motor_M1.getRotationTarget() - motor_M1.getRotation()) < angle_threshold) &&
+                        (fabs(motor_M2.getRotationTarget() - motor_M2.getRotation()) < angle_threshold)) {
+                        if (sensorBar.getRaw() == 0) {
+                            robot_state = RobotState::T_WAY;
                         }
-
-                        
-                        // control algorithm in robot velocities
-                        robot_coord = {0.5f * wheel_vel_max * r1_wheel, // half of the max. forward velocity
-                                                    Kp * angle};                     // proportional angle controller
-
-                        // map robot velocities to wheel velocities in rad/sec
-                        wheel_speed = Cwheel2robot.inverse() * robot_coord;
-
-                        // setpoints for the dc-motors in rps
-                        motor_M1.setVelocity(wheel_speed(0) / (2.0f * M_PI)); // set a desired speed for speed controlled dc motors M1
-                        motor_M2.setVelocity(wheel_speed(1) / (2.0f * M_PI)); // set a desired speed for speed controlled dc motors M2
-                    
-                        if (!sensorBar.isAnyLedActive()) {
-                            robot_state = RobotState::GAP;
-                        } 
-                        else if (lval == 0b11111111) {
-                            robot_state = RobotState::BLACK_OUT;
-                        } 
-                        else if (lval == 0b00001111) {
-                            robot_state = RobotState::RIGHT_ANGLE_R;
-                        } 
-                        else if (lval == 0b11110000) {
-                            robot_state = RobotState::RIGHT_ANGLE_L;
+                        if (sensorBar.getRaw() <= 256 && sensorBar.getRaw() >= 254) {
+                            robot_state = RobotState::DEAD_END;
                         }
-
-                        break;
-
-                    case RobotState::RIGHT_ANGLE_L:
-                        printf("RIGHT_ANGLE_L\n");
-                        
-                        //Move foward to center axel
-                        L_square = 0.105f;
-                        robot_coord_forward = {L_square, 0.0f};
-                        wheel_angle_forward = Cwheel2robot.inverse() * robot_coord_forward;
-
-                        motor_M1.setRotationRelative(wheel_angle_forward(0) / (2.0f * M_PI));
-                        motor_M2.setRotationRelative(wheel_angle_forward(1) / (2.0f * M_PI));
-                        
-                        counter++;
-
-                        if (counter == 1) {
-                        //Turn to the left
-                        robot_coord_turn = {0.0, (-1.0f * turn)}; //times -1 for left turn
-
-                        wheel_angle_turn = Cwheel2robot.inverse() * robot_coord_turn;
-
-                        motor_M1.setRotationRelative(wheel_angle_turn(0) / (2.0f * M_PI));
-                        motor_M2.setRotationRelative(wheel_angle_turn(1) / (2.0f * M_PI));
-                        }
-
-                        else if (counter > 60) {
-                            counter =0;
+                        if (sensorBar.getRaw() >= 1 && sensorBar.getRaw() < 254) {
                             robot_state = RobotState::LINE_FOLLOW;
                         }
-                        
-                        break;
-                        
-                    case RobotState::RIGHT_ANGLE_R:
-                        printf("RIGHT_ANGLE_R\n");
-                        
-                        //Move foward to center axel
-                        L_square = 0.105f;
-                        robot_coord_forward = {L_square, 0.0f};
-                        wheel_angle_forward = Cwheel2robot.inverse() * robot_coord_forward;
+                    }
 
-                        motor_M1.setRotationRelative(wheel_angle_forward(0) / (2.0f * M_PI));
-                        motor_M2.setRotationRelative(wheel_angle_forward(1) / (2.0f * M_PI));
+                    break;
 
-                        //Turn to the Right
-                        robot_coord_turn = {0.0f, (turn)}; //right turn
+                case RobotState::BU:
+                    //Intial starting state
+                    printf("BO_DEC\n");
 
-                        wheel_angle_turn = Cwheel2robot.inverse() * robot_coord_turn;
+                        //Move Back
+                        forw_1 = motor_M1.getRotation() - 0.1f;
+                        forw_2 = motor_M2.getRotation() - 0.1f;
 
-                        motor_M1.setRotationRelative(wheel_angle_turn(0) / (2.0f * M_PI));
-                        motor_M2.setRotationRelative(wheel_angle_turn(1) / (2.0f * M_PI));
+                        motor_M1.setRotation(forw_1);
+                        motor_M2.setRotation(forw_2);
 
-                        robot_state = RobotState::LINE_FOLLOW;
-                        
-                        break;
+                        robot_state = RobotState::T_WAY;
 
-                    case RobotState::GAP:
-                        printf("GAP\n");
+                    break;
 
-                        L_square = 0.03f;
-                        robot_coord_forward = {L_square, 0.0f};
-                        wheel_angle_forward = Cwheel2robot.inverse() * robot_coord_forward;
+                case RobotState::T_WAY:
+                    //Intial starting state
+                    printf("T_WAY\n");
 
-                        motor_M1.setRotationRelative(wheel_angle_forward(0) / (2.0f * M_PI));
-                        motor_M2.setRotationRelative(wheel_angle_forward(1) / (2.0f * M_PI));
+                    if ((fabs(motor_M1.getRotationTarget() - motor_M1.getRotation()) < angle_threshold) &&
+                    (fabs(motor_M2.getRotationTarget() - motor_M2.getRotation()) < angle_threshold)) {
+                    
+                    forw_1 = motor_M1.getRotation() + 0.8f;
+                    forw_2 = motor_M2.getRotation() - 0.8f;
 
-                        robot_state = RobotState::LINE_FOLLOW;
-                        break;
+                    motor_M1.setRotation(forw_1);
+                    motor_M2.setRotation(forw_2);
+                    
+                    robot_state = RobotState::BT_FOLLOW;
+                    }
 
-                    case RobotState::BLACK_OUT:
-                        printf("BLACK_OUT\n");
+                    break;
 
-                        L_square = 0.021f; //Move forward the width of the line
-                        robot_coord_forward = {L_square, 0.0f};
-                        wheel_angle_forward = Cwheel2robot.inverse() * robot_coord_forward;
+                case RobotState::BT_FOLLOW:
+                    //Intial starting state
+                    printf("BT_FOLLOW\n");
 
-                        motor_M1.setRotationRelative(wheel_angle_forward(0) / (2.0f * M_PI));
-                        motor_M2.setRotationRelative(wheel_angle_forward(1) / (2.0f * M_PI));
-                        
-                        lval = sensorBar.getRaw();
+                    if ((fabs(motor_M1.getRotationTarget() - motor_M1.getRotation()) < angle_threshold) &&
+                    (fabs(motor_M2.getRotationTarget() - motor_M2.getRotation()) < angle_threshold)) {
 
-                        //Nested State Machine
-                        switch (bo_state) {
-                            case BOState::BO_INITIAL:
-                                //Intial BO starting state
-                                printf("BO INITIAL\n");
+                    robot_state = RobotState::LINE_FOLLOW;
+                    }
 
-                                lval = sensorBar.getRaw();
+                    break;
 
-                                if (lval == 0b00000000) {
-                                    bo_state = BOState::T_WAY;
-                                } else if (lval == 0b11111111) {
-                                    bo_state = BOState::DEAD_END;
-                                } else if (sensorBar.isAnyLedActive()) {
-                                    bo_state = BOState::FOUR_WAY;
-                                }
-                                break;
+                case RobotState::DEAD_END:
+                    //Intial starting state
+                    printf("DEAD_END\n");
 
-                            case BOState::T_WAY:
-                                //Intial starting state
-                                printf("T_WAY\n");
+                    if ((fabs(motor_M1.getRotationTarget() - motor_M1.getRotation()) < angle_threshold) &&
+                    (fabs(motor_M2.getRotationTarget() - motor_M2.getRotation()) < angle_threshold)) {
+                    
+                    forw_1 = motor_M1.getRotation() + 1.6f;
+                    forw_2 = motor_M2.getRotation() - 1.6f;
 
-                                //Imma be honest this is just a left turn function
-                                //Move foward to center axel
-                                L_square = (0.105f - 0.021f);
-                                robot_coord_forward = {L_square, 0.0f};
-                                wheel_angle_forward = Cwheel2robot.inverse() * robot_coord_forward;
+                    motor_M1.setRotation(forw_1);
+                    motor_M2.setRotation(forw_2);
 
-                                motor_M1.setRotationRelative(wheel_angle_forward(0) / (2.0f * M_PI));
-                                motor_M2.setRotationRelative(wheel_angle_forward(1) / (2.0f * M_PI));
+                    robot_state = RobotState::BT_FOLLOW;
+                    }    
 
-                                //Turn to the left
-                                robot_coord_turn = {0.0, (-1.0f * turn)}; //times -1 for left turn
+                    break;
 
-                                wheel_angle_turn = Cwheel2robot.inverse() * robot_coord_turn;
+                default:
 
-                                motor_M1.setRotationRelative(wheel_angle_turn(0) / (2.0f * M_PI));
-                                motor_M2.setRotationRelative(wheel_angle_turn(1) / (2.0f * M_PI));
-
-                                robot_state = RobotState::LINE_FOLLOW;
-                                break;
-
-                            case BOState::DEAD_END:
-                                //Intial starting state
-                                printf("DEAD_END\n");
-                                
-                                counter++;
-
-                                if (counter == 1) {
-                                //Turn 180 degrees
-                                robot_coord_turn = {0.0, (2.0f * turn)}; //times 2 for 180 turn
-
-                                wheel_angle_turn = Cwheel2robot.inverse() * robot_coord_turn;
-
-                                motor_M1.setRotationRelative(wheel_angle_turn(0) / (2.0f * M_PI));
-                                motor_M2.setRotationRelative(wheel_angle_turn(1) / (2.0f * M_PI));
-                                }
-
-                                else if (counter > 60) {
-                                    counter =0;
-                                    robot_state = RobotState::LINE_FOLLOW;
-                                }
-                                break;
-
-                            case BOState::FOUR_WAY:
-                                //Intial starting state
-                                printf("FOUR_WAY\n");
-                                robot_state = RobotState::LINE_FOLLOW;
-                                break;
-
-                            // case BOState::DONE:
-                            //     //Intial starting state
-                            //     printf("DONE\n");
-
-                            //     break;
-
-                            default:
-
-                                break; // do nothing
-                        }
-
-                        // printf("Failed to determine case\n");
-                        break;
-
-                    default:
-
-                        break; // do nothing
+                    break; // do nothing
                 }
-            // // debugging
-            // printf("RS: %d, M1 SP: %.3f, M2 SP: %.3f, M1: %.3f, M2: %.3f, TC: %d\n", robot_state
-            //                                                                        , motor_M1.getRotationTarget()
-            //                                                                        , motor_M2.getRotationTarget()
-            //                                                                        , motor_M1.getRotation()
-            //                                                                        , motor_M2.getRotation()
-            //                                                                        , turn_cntr);
+
         } else {
             // the following code block gets executed only once
             if (do_reset_all_once) {

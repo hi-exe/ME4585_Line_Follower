@@ -42,8 +42,6 @@ int main()
     // led on nucleo board
     DigitalOut user_led(USER_LED);
 
-
-
     // DC Motot Intit
     // create object to enable power electronics for the dc motors
     DigitalOut enable_motors(PB_ENABLE_DCMOTORS);
@@ -75,18 +73,21 @@ int main()
     const float Kp{15.0f};
     const float wheel_vel_max = 2.0f * M_PI * motor_M2.getMaxPhysicalVelocity();
 
-
-
     // set up states for state machine
     enum RobotState {
         INITIAL,
         LINE_FOLLOW,
-        SEESAW,
-        STEP,
-        BRICK
+        BRICKED_UP,
+        TURN1,
+        FORWARD,
+        TURN2
     } robot_state = RobotState::INITIAL;
 
-    int counter = 0; //counter for delay thingy
+    int counter = 0; //counteR
+
+    //Forward movers
+    float forw_1;
+    float forw_2;
 
     // control algorithm in robot velocities
     Eigen::Vector2f robot_coord;
@@ -95,18 +96,14 @@ int main()
     // map robot velocities to wheel velocities in rad/sec
     Eigen::Vector2f wheel_speed;
 
-    // Turning Vector Stuff
-    const float turn = -M_PI / 2.0f; // -90 deg for right turn (CW), +90 deg for left turn (CCW)
-    Eigen::Vector2f robot_coord_turn;
-    Eigen::Vector2f wheel_angle_turn;
-
-    // Forward Vector Stuff
-    float L_square;     // forward distance in meters
-    Eigen::Vector2f robot_coord_forward;
-    Eigen::Vector2f wheel_angle_forward;
-
     //raw data tracker
     int lval;
+
+    // mechanical button
+    DigitalIn mechanical_button(PC_5); // create DigitalIn object to evaluate mechanical button, you
+                                    // need to specify the mode for proper usage, see below
+    mechanical_button.mode(PullUp);    // sets pullup between pin and 3.3 V, so that there
+                                    // is a defined potential
 
     // start timer
     main_task_timer.start();
@@ -152,43 +149,99 @@ int main()
                         // setpoints for the dc-motors in rps
                         motor_M1.setVelocity(wheel_speed(0) / (2.0f * M_PI)); // set a desired speed for speed controlled dc motors M1
                         motor_M2.setVelocity(wheel_speed(1) / (2.0f * M_PI)); // set a desired speed for speed controlled dc motors M2
-                    
-                        // if () {
-                        //     robot_state = RobotState::SEESAW;
-                        // } 
-                        // else if () {
-                        //     robot_state = RobotState::STEP;
-                        // } 
-                        // else if () {
-                        //     robot_state = RobotState::BRICK;
-                        // } 
+
+                        if (mechanical_button.read()) {
+                            robot_state = RobotState::BRICKED_UP;
+                        } 
 
                         break;
 
-                    case RobotState::SEESAW:
-                        printf("SEESAW\n");
-                        
-
-                       
-                        robot_state = RobotState::LINE_FOLLOW;
-
-                        break;
-                        
-                    case RobotState::STEP:
-                        printf("STEP\n");
-                        
-                      
-
-                        robot_state = RobotState::LINE_FOLLOW;
-                        
-                        break;
-
-                    case RobotState::BRICK:
+                    case RobotState::BRICKED_UP:
                         printf("BRICK\n");
 
-                       
+                        if ((fabs(motor_M1.getRotationTarget() - motor_M1.getRotation()) < angle_threshold) &&
+                            (fabs(motor_M2.getRotationTarget() - motor_M2.getRotation()) < angle_threshold)) {
+                            
+                            forw_1 = motor_M1.getRotation() + 0.2f;
+                            forw_2 = motor_M2.getRotation() + 0.2f;
 
-                        robot_state = RobotState::LINE_FOLLOW;
+                            motor_M1.setRotation(forw_1);
+                            motor_M2.setRotation(forw_2);
+
+                        }
+
+                        robot_state = RobotState::TURN1;
+
+                        break;
+
+                    case RobotState::TURN1:
+                        printf("BRICK\n");
+
+                        if ((fabs(motor_M1.getRotationTarget() - motor_M1.getRotation()) < angle_threshold) &&
+                            (fabs(motor_M2.getRotationTarget() - motor_M2.getRotation()) < angle_threshold)) {
+                            
+                            forw_1 = motor_M1.getRotation() + 0.2f;
+                            forw_2 = motor_M2.getRotation() + 0.2f;
+
+                            motor_M1.setRotation(forw_1);
+                            motor_M2.setRotation(forw_2);
+
+                        }
+
+                        robot_state = RobotState::FORWARD;
+
+                        break;
+
+                    case RobotState::FORWARD:
+                        printf("BRICK\n");
+                        
+                        if (counter == 0) {
+                            if ((fabs(motor_M1.getRotationTarget() - motor_M1.getRotation()) < angle_threshold) &&
+                                (fabs(motor_M2.getRotationTarget() - motor_M2.getRotation()) < angle_threshold)) {
+                                
+                                forw_1 = motor_M1.getRotation() + 0.2f;
+                                forw_2 = motor_M2.getRotation() + 0.2f;
+
+                                motor_M1.setRotation(forw_1);
+                                motor_M2.setRotation(forw_2);
+
+                            }
+                            counter++;
+                            robot_state = RobotState::TURN2;
+                        }
+
+                        if (counter == 1) {
+                            if ((fabs(motor_M1.getRotationTarget() - motor_M1.getRotation()) < angle_threshold) &&
+                                (fabs(motor_M2.getRotationTarget() - motor_M2.getRotation()) < angle_threshold)) {
+                                
+                                forw_1 = motor_M1.getRotation() + 0.2f;
+                                forw_2 = motor_M2.getRotation() + 0.2f;
+
+                                motor_M1.setRotation(forw_1);
+                                motor_M2.setRotation(forw_2);
+
+                            }
+
+                            robot_state = RobotState::LINE_FOLLOW;
+                        }
+
+                        break;
+
+                    case RobotState::TURN2:
+                        printf("BRICK\n");
+
+                        if ((fabs(motor_M1.getRotationTarget() - motor_M1.getRotation()) < angle_threshold) &&
+                            (fabs(motor_M2.getRotationTarget() - motor_M2.getRotation()) < angle_threshold)) {
+                            
+                            forw_1 = motor_M1.getRotation() + 0.2f;
+                            forw_2 = motor_M2.getRotation() + 0.2f;
+
+                            motor_M1.setRotation(forw_1);
+                            motor_M2.setRotation(forw_2);
+
+                        }
+
+                        robot_state = RobotState::FORWARD;
 
                         break;
 
