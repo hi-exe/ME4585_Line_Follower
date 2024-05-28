@@ -70,7 +70,7 @@ int main()
 
     // angle measured from sensor bar (black line) relative to robot
     float angle{0.0f};
-    const float Kp{15.0f};
+    const float Kp{8.0f};
     const float wheel_vel_max = 2.0f * M_PI * motor_M2.getMaxPhysicalVelocity();
 
     // set up states for state machine
@@ -79,11 +79,13 @@ int main()
         LINE_FOLLOW,
         BRICKED_UP,
         TURN1,
-        FORWARD,
+        FORWARD_1,
+        FORWARD_2,
+        BT_FOLLOW,
         TURN2
     } robot_state = RobotState::INITIAL;
 
-    int counter = 0; //counteR
+    int counter = 0; //counter
 
     //Forward movers
     float forw_1;
@@ -98,6 +100,10 @@ int main()
 
     //raw data tracker
     int lval;
+
+    //Rotation Stuff
+    const float angle_threshold = 0.01f;
+    int turn_center = 0;
 
     // mechanical button
     DigitalIn mechanical_button(PC_5); // create DigitalIn object to evaluate mechanical button, you
@@ -114,6 +120,11 @@ int main()
 
         lval = sensorBar.getRaw();
         printf("lval: %d \n", lval);
+
+        // only update sensor bar angle if a led is triggered
+        if (sensorBar.isAnyLedActive()) {
+            angle = sensorBar.getAvgAngleRad();
+        }
 
         if (do_execute_main_task) {
            
@@ -134,11 +145,6 @@ int main()
                         printf("lval: %d \n", lval);
                         printf("LINE_FOLLOW\n");
                         
-                        // only update sensor bar angle if a led is triggered
-                        if (sensorBar.isAnyLedActive()) {
-                            angle = sensorBar.getAvgAngleRad();
-                        }
-                        
                         // control algorithm in robot velocities
                         robot_coord = {0.5f * wheel_vel_max * r1_wheel, // half of the max. forward velocity
                                                     Kp * angle};                     // proportional angle controller
@@ -153,95 +159,96 @@ int main()
                         if (mechanical_button.read()) {
                             robot_state = RobotState::BRICKED_UP;
                         } 
-
                         break;
 
                     case RobotState::BRICKED_UP:
-                        printf("BRICK\n");
+                        printf("BRICKED_UP\n");
 
-                        if ((fabs(motor_M1.getRotationTarget() - motor_M1.getRotation()) < angle_threshold) &&
-                            (fabs(motor_M2.getRotationTarget() - motor_M2.getRotation()) < angle_threshold)) {
-                            
-                            forw_1 = motor_M1.getRotation() + 0.2f;
-                            forw_2 = motor_M2.getRotation() + 0.2f;
+                        forw_1 = motor_M1.getRotation() - 0.5f;
+                        forw_2 = motor_M2.getRotation() - 0.5f;
 
-                            motor_M1.setRotation(forw_1);
-                            motor_M2.setRotation(forw_2);
-
-                        }
+                        motor_M1.setRotation(forw_1);
+                        motor_M2.setRotation(forw_2);
 
                         robot_state = RobotState::TURN1;
 
                         break;
 
                     case RobotState::TURN1:
-                        printf("BRICK\n");
+                        printf("TURN1\n");
 
                         if ((fabs(motor_M1.getRotationTarget() - motor_M1.getRotation()) < angle_threshold) &&
                             (fabs(motor_M2.getRotationTarget() - motor_M2.getRotation()) < angle_threshold)) {
                             
-                            forw_1 = motor_M1.getRotation() + 0.2f;
-                            forw_2 = motor_M2.getRotation() + 0.2f;
+                            forw_1 = motor_M1.getRotation() + 0.4f;
+                            forw_2 = motor_M2.getRotation() - 0.4f;
 
                             motor_M1.setRotation(forw_1);
                             motor_M2.setRotation(forw_2);
 
+                            robot_state = RobotState::FORWARD_1;
                         }
-
-                        robot_state = RobotState::FORWARD;
 
                         break;
 
-                    case RobotState::FORWARD:
-                        printf("BRICK\n");
+                    case RobotState::FORWARD_1:
+                        printf("FORWARD\n");
                         
-                        if (counter == 0) {
-                            if ((fabs(motor_M1.getRotationTarget() - motor_M1.getRotation()) < angle_threshold) &&
-                                (fabs(motor_M2.getRotationTarget() - motor_M2.getRotation()) < angle_threshold)) {
-                                
-                                forw_1 = motor_M1.getRotation() + 0.2f;
-                                forw_2 = motor_M2.getRotation() + 0.2f;
+                        if ((fabs(motor_M1.getRotationTarget() - motor_M1.getRotation()) < angle_threshold) &&
+                            (fabs(motor_M2.getRotationTarget() - motor_M2.getRotation()) < angle_threshold)) {
+                            
+                            forw_1 = motor_M1.getRotation() + 2.5f;
+                            forw_2 = motor_M2.getRotation() + 2.5f;
 
-                                motor_M1.setRotation(forw_1);
-                                motor_M2.setRotation(forw_2);
+                            motor_M1.setRotation(forw_1);
+                            motor_M2.setRotation(forw_2);
 
-                            }
-                            counter++;
                             robot_state = RobotState::TURN2;
-                        }
-
-                        if (counter == 1) {
-                            if ((fabs(motor_M1.getRotationTarget() - motor_M1.getRotation()) < angle_threshold) &&
-                                (fabs(motor_M2.getRotationTarget() - motor_M2.getRotation()) < angle_threshold)) {
-                                
-                                forw_1 = motor_M1.getRotation() + 0.2f;
-                                forw_2 = motor_M2.getRotation() + 0.2f;
-
-                                motor_M1.setRotation(forw_1);
-                                motor_M2.setRotation(forw_2);
-
-                            }
-
-                            robot_state = RobotState::LINE_FOLLOW;
                         }
 
                         break;
 
                     case RobotState::TURN2:
-                        printf("BRICK\n");
+                        printf("TURN2\n");
 
                         if ((fabs(motor_M1.getRotationTarget() - motor_M1.getRotation()) < angle_threshold) &&
                             (fabs(motor_M2.getRotationTarget() - motor_M2.getRotation()) < angle_threshold)) {
                             
-                            forw_1 = motor_M1.getRotation() + 0.2f;
-                            forw_2 = motor_M2.getRotation() + 0.2f;
+                            forw_1 = motor_M1.getRotation() - 0.8f;
+                            forw_2 = motor_M2.getRotation() + 0.8f;
 
                             motor_M1.setRotation(forw_1);
                             motor_M2.setRotation(forw_2);
 
+                            robot_state = RobotState::FORWARD_2;
+                        }
+                        break;
+                    
+                    case RobotState::FORWARD_2:
+ 
+                        if ((fabs(motor_M1.getRotationTarget() - motor_M1.getRotation()) < angle_threshold) &&
+                            (fabs(motor_M2.getRotationTarget() - motor_M2.getRotation()) < angle_threshold)) {
+                            
+                            forw_1 = motor_M1.getRotation() + 2.0f;
+                            forw_2 = motor_M2.getRotation() + 2.0f;
+
+                            motor_M1.setRotation(forw_1);
+                            motor_M2.setRotation(forw_2);
+
+                            robot_state = RobotState::BT_FOLLOW;
                         }
 
-                        robot_state = RobotState::FORWARD;
+                        break;
+
+                    case RobotState::BT_FOLLOW:
+                        //Intial starting state
+                        printf("BT_FOLLOW\n");
+
+                        if ((fabs(motor_M1.getRotationTarget() - motor_M1.getRotation()) < angle_threshold) &&
+                        (fabs(motor_M2.getRotationTarget() - motor_M2.getRotation()) < angle_threshold)) {
+
+                            robot_state = RobotState::LINE_FOLLOW;
+                        }
 
                         break;
 
@@ -249,13 +256,6 @@ int main()
 
                         break; // do nothing
                 }
-            // // debugging
-            // printf("RS: %d, M1 SP: %.3f, M2 SP: %.3f, M1: %.3f, M2: %.3f, TC: %d\n", robot_state
-            //                                                                        , motor_M1.getRotationTarget()
-            //                                                                        , motor_M2.getRotationTarget()
-            //                                                                        , motor_M1.getRotation()
-            //                                                                        , motor_M2.getRotation()
-            //                                                                        , turn_cntr);
         } else {
             // the following code block gets executed only once
             if (do_reset_all_once) {
