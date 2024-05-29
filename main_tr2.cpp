@@ -43,7 +43,6 @@ int main()
     DigitalOut user_led(USER_LED);
 
 
-
     // DC Motot Intit
     // create object to enable power electronics for the dc motors
     DigitalOut enable_motors(PB_ENABLE_DCMOTORS);
@@ -242,8 +241,8 @@ int main()
                     if ((fabs(motor_M1.getRotationTarget() - motor_M1.getRotation()) < angle_threshold) &&
                     (fabs(motor_M2.getRotationTarget() - motor_M2.getRotation()) < angle_threshold)) {
                     
-                    forw_1 = motor_M1.getRotation() + 1.6f;
-                    forw_2 = motor_M2.getRotation() - 1.6f;
+                    forw_1 = motor_M1.getRotation() + 1.4f;
+                    forw_2 = motor_M2.getRotation() - 1.4f;
 
                     motor_M1.setRotation(forw_1);
                     motor_M2.setRotation(forw_2);

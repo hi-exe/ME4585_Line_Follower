@@ -70,7 +70,7 @@ int main()
 
     // angle measured from sensor bar (black line) relative to robot
     float angle{0.0f};
-    const float Kp{8.0f};
+    const float Kp{9.0f};
     const float wheel_vel_max = 2.0f * M_PI * motor_M2.getMaxPhysicalVelocity();
 
     // set up states for state machine
@@ -180,8 +180,8 @@ int main()
                         if ((fabs(motor_M1.getRotationTarget() - motor_M1.getRotation()) < angle_threshold) &&
                             (fabs(motor_M2.getRotationTarget() - motor_M2.getRotation()) < angle_threshold)) {
                             
-                            forw_1 = motor_M1.getRotation() + 0.4f;
-                            forw_2 = motor_M2.getRotation() - 0.4f;
+                            forw_1 = motor_M1.getRotation() + 0.5f;
+                            forw_2 = motor_M2.getRotation() - 0.5f;
 
                             motor_M1.setRotation(forw_1);
                             motor_M2.setRotation(forw_2);
@@ -197,8 +197,8 @@ int main()
                         if ((fabs(motor_M1.getRotationTarget() - motor_M1.getRotation()) < angle_threshold) &&
                             (fabs(motor_M2.getRotationTarget() - motor_M2.getRotation()) < angle_threshold)) {
                             
-                            forw_1 = motor_M1.getRotation() + 2.5f;
-                            forw_2 = motor_M2.getRotation() + 2.5f;
+                            forw_1 = motor_M1.getRotation() + 2.6f;
+                            forw_2 = motor_M2.getRotation() + 2.6f;
 
                             motor_M1.setRotation(forw_1);
                             motor_M2.setRotation(forw_2);
@@ -214,8 +214,8 @@ int main()
                         if ((fabs(motor_M1.getRotationTarget() - motor_M1.getRotation()) < angle_threshold) &&
                             (fabs(motor_M2.getRotationTarget() - motor_M2.getRotation()) < angle_threshold)) {
                             
-                            forw_1 = motor_M1.getRotation() - 0.8f;
-                            forw_2 = motor_M2.getRotation() + 0.8f;
+                            forw_1 = motor_M1.getRotation() - 0.9f;
+                            forw_2 = motor_M2.getRotation() + 0.9f;
 
                             motor_M1.setRotation(forw_1);
                             motor_M2.setRotation(forw_2);
@@ -229,8 +229,8 @@ int main()
                         if ((fabs(motor_M1.getRotationTarget() - motor_M1.getRotation()) < angle_threshold) &&
                             (fabs(motor_M2.getRotationTarget() - motor_M2.getRotation()) < angle_threshold)) {
                             
-                            forw_1 = motor_M1.getRotation() + 2.0f;
-                            forw_2 = motor_M2.getRotation() + 2.0f;
+                            forw_1 = motor_M1.getRotation() + 2.2f;
+                            forw_2 = motor_M2.getRotation() + 2.2f;
 
                             motor_M1.setRotation(forw_1);
                             motor_M2.setRotation(forw_2);
