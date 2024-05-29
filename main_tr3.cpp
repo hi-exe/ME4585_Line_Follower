@@ -146,7 +146,7 @@ int main()
                         printf("LINE_FOLLOW\n");
                         
                         // control algorithm in robot velocities
-                        robot_coord = {0.5f * wheel_vel_max * r1_wheel, // half of the max. forward velocity
+                        robot_coord = {1.0f * wheel_vel_max * r1_wheel, // half of the max. forward velocity
                                                     Kp * angle};                     // proportional angle controller
 
                         // map robot velocities to wheel velocities in rad/sec
