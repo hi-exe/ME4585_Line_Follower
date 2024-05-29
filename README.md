@@ -9,4 +9,10 @@ Adjustments were made to a few of the constant values such as wheel diameter, wh
 
 **Main Track 2**
 
-This is the main cpp file for Track 2 "Brain Washer".
+This is the main cpp file for Track 2 "Brain Washer". This code uses the customizable code for line-following that uses the sensorbar library. 
+This is necessary to code custom parameters to overcome obstacles. 
+This code uses a case machine to switch between states for each obstacle, where each case contains the necessary instructions to overcome the obstacle.
+
+**Main Track 3**
+
+This is the main cpp file for Track 3 "Over and Around".
