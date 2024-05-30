@@ -60,7 +60,7 @@ int main()
     // robot kinematics
     const float r1_wheel = 0.035f/2.0f; // right wheel radius in meters
     const float r2_wheel = 0.035f/2.0f; // left  wheel radius in meters
-    const float b_wheel = 0.1518f; // wheelbase, distance from wheel to wheel in meters
+    const float b_wheel = 0.153f; // wheelbase, distance from wheel to wheel in meters
     Eigen::Matrix2f Cwheel2robot; // transform wheel to robot
     Cwheel2robot <<  r1_wheel / 2.0f   ,  r2_wheel / 2.0f   ,
                     r1_wheel / b_wheel, -r2_wheel / b_wheel;

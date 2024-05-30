@@ -59,7 +59,7 @@ int main()
 
     // Line Follower Init
     const float d_wheel = 0.053f;  // wheel diameter in meters
-    const float b_wheel = 0.156f; // wheelbase, distance from wheel to wheel in meters
+    const float b_wheel = 0.153f; // wheelbase, distance from wheel to wheel in meters
     const float bar_dist = 0.132f; // distance from wheel axis to leds on sensor bar / array in meters
     // line follower
     LineFollower lineFollower(PB_9, PB_8, bar_dist, d_wheel, b_wheel, motor_M2.getMaxPhysicalVelocity());

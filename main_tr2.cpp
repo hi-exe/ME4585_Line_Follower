@@ -1,3 +1,4 @@
+
 #include "mbed.h"
 
 // pes board pin map
@@ -211,8 +212,8 @@ int main()
                     if ((fabs(motor_M1.getRotationTarget() - motor_M1.getRotation()) < angle_threshold) &&
                     (fabs(motor_M2.getRotationTarget() - motor_M2.getRotation()) < angle_threshold)) {
                     
-                    forw_1 = motor_M1.getRotation() + 0.8f;
-                    forw_2 = motor_M2.getRotation() - 0.8f;
+                    forw_1 = motor_M1.getRotation() + 0.7f;
+                    forw_2 = motor_M2.getRotation() - 0.7f;
 
                     motor_M1.setRotation(forw_1);
                     motor_M2.setRotation(forw_2);
@@ -241,8 +242,8 @@ int main()
                     if ((fabs(motor_M1.getRotationTarget() - motor_M1.getRotation()) < angle_threshold) &&
                     (fabs(motor_M2.getRotationTarget() - motor_M2.getRotation()) < angle_threshold)) {
                     
-                    forw_1 = motor_M1.getRotation() + 1.4f;
-                    forw_2 = motor_M2.getRotation() - 1.4f;
+                    forw_1 = motor_M1.getRotation() + 1.7f;
+                    forw_2 = motor_M2.getRotation() - 1.7f;
 
                     motor_M1.setRotation(forw_1);
                     motor_M2.setRotation(forw_2);
